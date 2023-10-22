@@ -407,7 +407,7 @@ def policy_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=
     return model, ckpt_dict
 
 
-def env_from_checkpoint(ckpt_path=None, ckpt_dict=None, env_name=None, render=False, render_offscreen=False, verbose=False):
+def env_from_checkpoint(ckpt_path=None, ckpt_dict=None, env_name=None, render=False, render_offscreen=False, verbose=False, robot=None):
     """
     Creates an environment using the metadata saved in a checkpoint.
 
@@ -430,9 +430,32 @@ def env_from_checkpoint(ckpt_path=None, ckpt_dict=None, env_name=None, render=Fa
             re-loading checkpoint from disk multiple times)
     """
     ckpt_dict = maybe_dict_from_checkpoint(ckpt_path=ckpt_path, ckpt_dict=ckpt_dict)
-
+    
+    """
+    dict_keys(['model', 'config', 'algo_name', 'env_metadata', 'shape_metadata'])
+    'env_metadata': {'env_name': 'Lift', 'type': 1, 'env_kwargs': {'has_renderer': False, 'has_offscreen_renderer': False, 'ignore_done': True, 'use_object_obs': True, 'use_camera_obs': False, 'control_freq': 20, 'controller_configs': {'type': 'OSC_POSE', 'input_max': 1, 'input_min': -1, 'output_max': [0.05, 0.05, 0.05, 0.5, 0.5, 0.5], 'output_min': [-0.05, -0.05, -0.05, -0.5, -0.5, -0.5], 'kp': 150, 'damping': 1, 'impedance_mode': 'fixed', 'kp_limits': [0, 300], 'damping_limits': [0, 10], 'position_limits': None, 'orientation_limits': None, 'uncouple_pos_ori': True, 'control_delta': True, 'interpolation': None, 'ramp_ratio': 0.2}, 'robots': ['Panda'], 'camera_depths': False, 'camera_heights': 84, 'camera_widths': 84, 'reward_shaping': False}}
+    'shape_metadata': {'ac_dim': 7, 'all_shapes': OrderedDict([('object', (10,)), ('robot0_eef_pos', (3,)), ('robot0_eef_quat', (4,)), ('robot0_gripper_qpos', (2,))]), 'all_modalities': ['object', 'robot0_eef_pos', 'robot0_eef_quat', 'robot0_gripper_qpos'], 'use_images': False}
+    
+    {'object': array([ 0.0255358 , -0.02573784,  0.83120553,  0.        ,  0.        ,
+        0.2703194 ,  0.9627707 , -0.11677277, -0.00525447,  0.1788359 ]), 'robot0_joint_pos': array([-0.04536656,  0.22302045, -0.01685448, -2.57859539,  0.02532237,
+        2.93147512,  0.83630218]), 'robot0_joint_pos_cos': array([ 0.99897111,  0.97523385,  0.99985797, -0.8456592 ,  0.99967941,
+       -0.97800641,  0.67021181]), 'robot0_joint_pos_sin': array([-0.045351  ,  0.22117627, -0.01685368, -0.53372326,  0.02531966,
+        0.20857485,  0.74216988]), 'robot0_joint_vel': array([0., 0., 0., 0., 0., 0., 0.]), 'robot0_eef_pos': array([-0.09123698, -0.03099231,  1.01004142]), 'robot0_eef_quat': array([ 0.99556982, -0.0680005 ,  0.06492465, -0.00120922]), 'robot0_eef_vel_lin': array([0., 0., 0.]), 'robot0_eef_vel_ang': array([0., 0., 0.]), 'robot0_gripper_qpos': array([ 0.020833, -0.020833]), 'robot0_gripper_qvel': array([0., 0.])}        
+    """
+    
+    
+    
     # metadata from model dict to get info needed to create environment
     env_meta = ckpt_dict["env_metadata"]
+    if robot is not None:
+        if env_meta['env_name'] == "TwoArmTransport":
+            env_meta['env_kwargs']['robots'] = [robot, robot]
+        else:
+            env_meta['env_kwargs']['robots'] = [robot]
+    # env_meta['env_kwargs']['robots'] = ['Sawyer']
+    # env_meta['env_kwargs']['camera_names'] = "sideview"
+    # env_meta['env_kwargs']['use_object_obs'] = False
+    # env_meta['env_kwargs']['use_camera_obs'] = True
     shape_meta = ckpt_dict["shape_metadata"]
 
     # create env from saved metadata
@@ -506,8 +529,9 @@ def download_url(url, download_dir, check_overwrite=True):
     # we ask the user to verify that they want to overwrite the file
     if check_overwrite and os.path.exists(file_to_write):
         user_response = input(f"Warning: file {file_to_write} already exists. Overwrite? y/n\n")
-        assert user_response.lower() in {"yes", "y"}, f"Did not receive confirmation. Aborting download."
-
+        # assert user_response.lower() in {"yes", "y"}, f"Did not receive confirmation. Aborting download."
+        if not user_response.lower() in {"yes", "y"}:
+            return
     with DownloadProgressBar(unit='B', unit_scale=True,
                              miniters=1, desc=fname) as t:
         urllib.request.urlretrieve(url, filename=file_to_write, reporthook=t.update_to)

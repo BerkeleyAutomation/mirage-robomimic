@@ -233,6 +233,7 @@ def create_env_for_data_processing(
     camera_height, 
     camera_width, 
     reward_shaping,
+    robot=None
 ):
     """
     Creates environment for processing dataset observations and rewards.
@@ -255,6 +256,11 @@ def create_env_for_data_processing(
         reward_shaping (bool): if True, use shaped environment rewards, else use sparse task completion rewards
     """
     env_name = env_meta["env_name"]
+    if robot is not None:
+        if env_meta['env_name'] == "TwoArmTransport":
+            env_meta['env_kwargs']['robots'] = [robot, robot]
+        else:
+            env_meta['env_kwargs']['robots'] = [robot]
     env_type = get_env_type(env_meta=env_meta)
     env_kwargs = env_meta["env_kwargs"]
     env_class = get_env_class(env_type=env_type)

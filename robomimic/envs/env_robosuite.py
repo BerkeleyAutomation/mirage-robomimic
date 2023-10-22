@@ -367,7 +367,7 @@ class EnvRobosuite(EB.EnvBase):
         # note that @postprocess_visual_obs is False since this env's images will be written to a dataset
         return cls(
             env_name=env_name,
-            render=False, 
+            render=kwargs["has_renderer"], # need to pass in the argument if we ever want to render (eg. using the extract trajectory script to do playback)
             render_offscreen=has_camera, 
             use_image_obs=has_camera, 
             postprocess_visual_obs=False,

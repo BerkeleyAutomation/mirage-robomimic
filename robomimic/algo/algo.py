@@ -319,6 +319,8 @@ class Algo(object):
             model_dict (dict): a dictionary saved by self.serialize() that contains
                 the same keys as @self.network_classes
         """
+        for key in list(model_dict.keys()):
+            model_dict[key.replace('pool_net', 'pool'). replace('vis_core', 'backbone')] = model_dict.pop(key)
         self.nets.load_state_dict(model_dict)
 
     def __repr__(self):
