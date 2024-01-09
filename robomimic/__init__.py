@@ -89,21 +89,12 @@ def register_all_links():
             link="http://downloads.cs.stanford.edu/downloads/rt_benchmark/{}/mg/demo_v141.hdf5".format(task))
         register_dataset_link(task=task, dataset_type="mg", hdf5_type="low_dim_sparse", horizon=horizon,
             link="http://downloads.cs.stanford.edu/downloads/rt_benchmark/{}/mg/low_dim_sparse_v141.hdf5".format(task))
-<<<<<<< HEAD
-        # register_dataset_link(task=task, dataset_type="mg", hdf5_type="image_sparse", horizon=horizon,
-        #     link="http://downloads.cs.stanford.edu/downloads/rt_benchmark/{}/mg/image_sparse_v141.hdf5".format(task))
-        register_dataset_link(task=task, dataset_type="mg", hdf5_type="low_dim_dense", horizon=horizon,
-            link="http://downloads.cs.stanford.edu/downloads/rt_benchmark/{}/mg/low_dim_dense_v141.hdf5".format(task))
-        # register_dataset_link(task=task, dataset_type="mg", hdf5_type="image_dense", horizon=horizon,
-        #     link="http://downloads.cs.stanford.edu/downloads/rt_benchmark/{}/mg/image_dense_v141.hdf5".format(task))
-=======
         register_dataset_link(task=task, dataset_type="mg", hdf5_type="image_sparse", horizon=horizon,
             link=None)
         register_dataset_link(task=task, dataset_type="mg", hdf5_type="low_dim_dense", horizon=horizon,
             link="http://downloads.cs.stanford.edu/downloads/rt_benchmark/{}/mg/low_dim_dense_v141.hdf5".format(task))
         register_dataset_link(task=task, dataset_type="mg", hdf5_type="image_dense", horizon=horizon,
             link=None)
->>>>>>> master
 
     # can-paired dataset
     register_dataset_link(task="can", dataset_type="paired", hdf5_type="raw", horizon=400,
