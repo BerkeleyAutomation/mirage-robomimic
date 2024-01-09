@@ -371,7 +371,7 @@ def process_frame(frame, channel_dim, scale):
     Args:
         frame (np.array or torch.Tensor): frame array
         channel_dim (int): Number of channels to sanity check for
-        scale (float): Value to normalize inputs by
+        scale (float or None): Value to normalize inputs by
 
     Returns:
         processed_frame (np.array or torch.Tensor): processed frame
@@ -379,8 +379,9 @@ def process_frame(frame, channel_dim, scale):
     # Channel size should either be 3 (RGB) or 1 (depth)
     assert (frame.shape[-1] == channel_dim)
     frame = TU.to_float(frame)
-    frame = frame / scale
-    frame = frame.clip(0.0, 1.0)
+    if scale is not None:
+        frame = frame / scale
+        frame = frame.clip(0.0, 1.0)
     frame = batch_image_hwc_to_chw(frame)
 
     return frame
@@ -439,7 +440,7 @@ def unprocess_frame(frame, channel_dim, scale):
     Args:
         frame (np.array or torch.Tensor): frame array
         channel_dim (int): What channel dimension should be (used for sanity check)
-        scale (float): Scaling factor to apply during denormalization
+        scale (float or None): Scaling factor to apply during denormalization
 
     Returns:
         unprocessed_frame (np.array or torch.Tensor): frame passed through
@@ -447,7 +448,8 @@ def unprocess_frame(frame, channel_dim, scale):
     """
     assert frame.shape[-3] == channel_dim # check for channel dimension
     frame = batch_image_chw_to_hwc(frame)
-    frame = frame * scale
+    if scale is not None:
+        frame = scale * frame
     return frame
 
 
@@ -474,7 +476,7 @@ def normalize_obs(obs_dict, obs_normalization_stats):
 
     Args:
         obs_dict (dict): dictionary mapping observation key to np.array or
-            torch.Tensor. Leading batch dimensions are optional.
+            torch.Tensor. Can have any number of leading batch dimensions.
 
         obs_normalization_stats (dict): this should map observation keys to dicts
             with a "mean" and "std" of shape (1, ...) where ... is the default
@@ -488,18 +490,23 @@ def normalize_obs(obs_dict, obs_normalization_stats):
     assert set(obs_dict.keys()).issubset(obs_normalization_stats)
 
     for m in obs_dict:
-        mean = obs_normalization_stats[m]["mean"]
-        std = obs_normalization_stats[m]["std"]
+        # get rid of extra dimension - we will pad for broadcasting later
+        mean = obs_normalization_stats[m]["mean"][0]
+        std = obs_normalization_stats[m]["std"][0]
 
-        # check shape consistency
-        shape_len_diff = len(mean.shape) - len(obs_dict[m].shape)
-        assert shape_len_diff in [0, 1], "shape length mismatch in @normalize_obs"
-        assert mean.shape[shape_len_diff:] == obs_dict[m].shape, "shape mismatch in @normalize obs"
+        # shape consistency checks
+        m_num_dims = len(mean.shape)
+        shape_len_diff = len(obs_dict[m].shape) - m_num_dims
+        assert shape_len_diff >= 0, "shape length mismatch in @normalize_obs"
+        assert obs_dict[m].shape[-m_num_dims:] == mean.shape, "shape mismatch in @normalize_obs"
 
-        # handle case where obs dict is not batched by removing stats batch dimension
-        if shape_len_diff == 1:
-            mean = mean[0]
-            std = std[0]
+        # Obs can have one or more leading batch dims - prepare for broadcasting.
+        # 
+        # As an example, if the obs has shape [B, T, D] and our mean / std stats are shape [D]
+        # then we should pad the stats to shape [1, 1, D].
+        reshape_padding = tuple([1] * shape_len_diff)
+        mean = mean.reshape(reshape_padding + tuple(mean.shape))
+        std = std.reshape(reshape_padding + tuple(std.shape))
 
         obs_dict[m] = (obs_dict[m] - mean) / std
 
@@ -943,10 +950,34 @@ class ScanModality(Modality):
 
     @classmethod
     def _default_obs_processor(cls, obs):
+        # Channel swaps ([...,] L, C) --> ([...,] C, L)
+        
+        # First, add extra dimension at 2nd to last index to treat this as a frame
+        shape = obs.shape
+        new_shape = [*shape[:-2], 1, *shape[-2:]]
+        obs = obs.reshape(new_shape)
+        
+        # Convert shape
+        obs = batch_image_hwc_to_chw(obs)
+        
+        # Remove extra dimension (it's the second from last dimension)
+        obs = obs.squeeze(-2)
         return obs
 
     @classmethod
     def _default_obs_unprocessor(cls, obs):
+        # Channel swaps ([B,] C, L) --> ([B,] L, C)
+        
+        # First, add extra dimension at 1st index to treat this as a frame
+        shape = obs.shape
+        new_shape = [*shape[:-2], 1, *shape[-2:]]
+        obs = obs.reshape(new_shape)
+
+        # Convert shape
+        obs = batch_image_chw_to_hwc(obs)
+
+        # Remove extra dimension (it's the second from last dimension)
+        obs = obs.squeeze(-2)
         return obs
 
 
