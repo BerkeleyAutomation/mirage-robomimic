@@ -67,6 +67,10 @@ class EnvRobosuite(EB.EnvBase):
             use_camera_obs=use_image_obs,
             camera_depths=False,
         )
+        
+        if "camera_depths" in kwargs:
+            update_kwargs["camera_depths"] = kwargs["camera_depths"]
+        
         kwargs.update(update_kwargs)
 
         if self._is_v1:
@@ -192,10 +196,32 @@ class EnvRobosuite(EB.EnvBase):
             di = self.env._get_observations(force_update=True) if self._is_v1 else self.env._get_observation()
         ret = {}
         for k in di:
-            if (k in ObsUtils.OBS_KEYS_TO_MODALITIES) and ObsUtils.key_is_obs_modality(key=k, obs_modality="rgb"):
+            # Revert to original when changing the images to inpainted
+            # if (k in ObsUtils.OBS_KEYS_TO_MODALITIES) and ObsUtils.key_is_obs_modality(key=k, obs_modality="rgb"):
+            #     # by default images from mujoco are flipped in height
+            #     ret[k] = di[k][::-1]
+            #     if self.postprocess_visual_obs:
+            #         ret[k] = ObsUtils.process_obs(obs=ret[k], obs_key=k)
+            # elif (k in ObsUtils.OBS_KEYS_TO_MODALITIES) and ObsUtils.key_is_obs_modality(key=k, obs_modality="depth"):
+            #     # by default depth images from mujoco are flipped in height
+            #     ret[k] = di[k][::-1]
+            #     if len(ret[k].shape) == 2:
+            #         ret[k] = ret[k][..., None] # (H, W, 1)
+            #     assert len(ret[k].shape) == 3 
+            #     # scale entries in depth map to correspond to real distance.
+            #     ret[k] = self.get_real_depth_map(ret[k])
+            #     if self.postprocess_visual_obs:
+            #         ret[k] = ObsUtils.process_obs(obs=ret[k], obs_key=k)
+            # if True:
+            if "image" in k or ((k in ObsUtils.OBS_KEYS_TO_MODALITIES) and ObsUtils.key_is_obs_modality(key=k, obs_modality="rgb")):
                 ret[k] = di[k][::-1]
-                if self.postprocess_visual_obs:
-                    ret[k] = ObsUtils.process_obs(obs=ret[k], obs_key=k)
+                if "image" in k or self.postprocess_visual_obs:
+                    if "image" in k:
+                        ret[k] = ObsUtils.process_obs(obs=ret[k], obs_modality="rgb")
+                    else:
+                        ret[k] = ObsUtils.process_obs(obs=ret[k], obs_key=k)
+            else:
+                ret[k] = di[k]
 
         # "object" key contains object information
         ret["object"] = np.array(di["object-state"])

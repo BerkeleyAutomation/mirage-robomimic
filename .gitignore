@@ -123,3 +123,15 @@ venv.bak/
 
 # private macros
 macros_private.py
+
+# No wandb or runs
+wandb/
+runs/
+
+# No images or pickle files
+**.png
+*.jpg
+*.jpeg
+*.gif
+*.pickle
+*.pkl

@@ -68,6 +68,15 @@ import robomimic.utils.obs_utils as ObsUtils
 from robomimic.envs.env_base import EnvBase
 from robomimic.algo import RolloutPolicy
 
+import pickle
+import robosuite.utils.transform_utils as T
+def compute_eef_pose(env):
+    """return a 7D pose vector"""
+    eef_site_name = env.env.robots[0].controller.eef_name
+    pos = np.array(env.env.sim.data.site_xpos[env.env.sim.model.site_name2id(eef_site_name)])
+    rot = np.array(T.mat2quat(env.env.sim.data.site_xmat[env.env.sim.model.site_name2id(eef_site_name)].reshape([3, 3])))
+    pose = np.concatenate((pos, rot))
+    return pose
 
 def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5, return_obs=False, camera_names=None):
     """
@@ -91,7 +100,7 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
         stats (dict): some statistics for the rollout - such as return, horizon, and task success
         traj (dict): dictionary that corresponds to the rollout trajectory
     """
-    assert isinstance(env, EnvBase)
+    # assert isinstance(env, EnvBase)
     assert isinstance(policy, RolloutPolicy)
     assert not (render and (video_writer is not None))
 
@@ -106,18 +115,52 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
     video_count = 0  # video frame counter
     total_reward = 0.
     traj = dict(actions=[], rewards=[], dones=[], states=[], initial_state_dict=state_dict)
+    # breakpoint() obs: dict_keys(['agentview_image', 'object', 'robot0_joint_pos', 'robot0_joint_pos_cos', 'robot0_joint_pos_sin', 'robot0_joint_vel', 'robot0_eef_pos', 'robot0_eef_quat', 'robot0_eef_vel_lin', 'robot0_eef_vel_ang', 'robot0_gripper_qpos', 'robot0_gripper_qvel'])
+    
+    import sys
+    sys.path.insert(0, "/home/lawrence/xembody/xembody/xembody_robosuite")
+    from image_inpainting.forward_dynamics_model import ForwardDynamicsModel
+    forward_dynamics_model_path = "/home/lawrence/xembody/robomimic/forward_dynamics_1layer_32/forward_dynamics_bc_img_300.pth"
+    forward_dynamics_model = ForwardDynamicsModel(model_path=forward_dynamics_model_path)
+    
+    # Initialize an empty list to store transitions
+    transitions = []
+    
     if return_obs:
         # store observations too
         traj.update(dict(obs=[], next_obs=[]))
     try:
         for step_i in range(horizon):
-
+            # breakpoint()
+            current_pose = compute_eef_pose(env) # env.env
+            from PIL import Image
+            obs_copy = deepcopy(obs)
+            # if obs_copy["agentview_image"].shape[-1] != 84:
+            #     rgb_img = obs_copy['agentview_image']
+            #     rgb_img = rgb_img.transpose(1, 2, 0)
+            #     rgb_img = np.array(Image.fromarray((rgb_img * 255).astype(np.uint8)).resize((84, 84))).astype(np.float32) / 255.0
+            #     obs_copy["agentview_image"] = rgb_img.transpose(2, 0, 1)
+            # if obs_copy["robot0_eye_in_hand_image"].shape[-1] != 84:
+            #     rgb_img = obs_copy['robot0_eye_in_hand_image']
+            #     rgb_img = rgb_img.transpose(1, 2, 0)
+            #     rgb_img = np.array(Image.fromarray((rgb_img * 255).astype(np.uint8)).resize((84, 84))).astype(np.float32) / 255.0
+            #     obs_copy["robot0_eye_in_hand_image"] = rgb_img.transpose(2, 0, 1)
             # get action from policy
-            act = policy(ob=obs)
+            act = policy(ob=obs_copy)
+            
+            # TODO: Add noise for robustness, tune if necessary
+            # if np.random.rand() < 0.3:
+            #     # std in the translation components: 0.5, std in the rotation components: 0.4
+            #     act[:3] += np.random.normal(0, 0.9, 3)
+            #     act[3:6] += np.random.normal(0, 0.7, 3)
+            #     # for gripper, 50% of the time, flip the gripper action
+            #     if np.random.rand() < 0.5:
+            #         act[-1] = 1 - act[-1]
 
             # play action
             next_obs, r, done, _ = env.step(act)
-
+            # For multi-step, use env.env
+            next_pose = compute_eef_pose(env) #env.env
             # compute reward
             total_reward += r
             success = env.is_success()["task"]
@@ -134,6 +177,18 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
                     video_writer.append_data(video_img)
                 video_count += 1
 
+            
+            transition = {
+                        'current_state': np.concatenate([current_pose, obs['robot0_gripper_qpos']]),
+                        'action': act,
+                        'next_state': np.concatenate([next_pose, next_obs['robot0_gripper_qpos']]),
+                    }
+            # TODO: Use actual transition when collecting data
+            predicted_state = forward_dynamics_model(transition['current_state'], transition['action'])
+            transition["predicted_state"] = predicted_state
+        
+            transitions.append(transition)
+            
             # collect transition
             traj["actions"].append(act)
             traj["rewards"].append(r)
@@ -174,7 +229,7 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
         else:
             traj[k] = np.array(traj[k])
 
-    return stats, traj
+    return stats, traj, transitions
 
 
 def run_trained_agent(args):
@@ -229,8 +284,11 @@ def run_trained_agent(args):
         total_samples = 0
 
     rollout_stats = []
+    all_transitions = []
+    
     for i in range(rollout_num_episodes):
-        stats, traj = rollout(
+        print(i)
+        stats, traj, transitions = rollout(
             policy=policy, 
             env=env, 
             horizon=rollout_horizon, 
@@ -241,7 +299,11 @@ def run_trained_agent(args):
             camera_names=args.camera_names,
         )
         rollout_stats.append(stats)
-
+        all_transitions.extend(transitions)
+        # save transitions
+        with open('/home/lawrence/xembody/robomimic/forward_dynamics/lift_bc_forward_dynamics_data_test.pkl', 'wb') as f:
+            pickle.dump(all_transitions, f)
+            
         if write_dataset:
             # store transitions
             ep_data_grp = data_grp.create_group("demo_{}".format(i))

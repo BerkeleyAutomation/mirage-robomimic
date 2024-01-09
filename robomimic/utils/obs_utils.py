@@ -93,14 +93,14 @@ def obs_encoder_kwargs_from_config(obs_encoder_config):
     # Unlock encoder config
     obs_encoder_config.unlock()
     for obs_modality, encoder_kwargs in obs_encoder_config.items():
-        # First run some sanity checks and store the classes
-        for cls_name, cores in zip(("core", "obs_randomizer"), (OBS_ENCODER_CORES, OBS_RANDOMIZERS)):
-            # Make sure the requested encoder for each obs_modality exists
-            cfg_cls = encoder_kwargs[f"{cls_name}_class"]
-            if cfg_cls is not None:
-                assert cfg_cls in cores, f"No {cls_name} class with name {cfg_cls} found, must register this class before" \
-                    f"creating model!"
-                # encoder_kwargs[f"{cls_name}_class"] = cores[cfg_cls]
+        # # First run some sanity checks and store the classes
+        # for cls_name, cores in zip(("core", "obs_randomizer"), (OBS_ENCODER_CORES, OBS_RANDOMIZERS)):
+        #     # Make sure the requested encoder for each obs_modality exists
+        #     cfg_cls = encoder_kwargs[f"{cls_name}_class"]
+        #     if cfg_cls is not None:
+        #         assert cfg_cls in cores, f"No {cls_name} class with name {cfg_cls} found, must register this class before" \
+        #             f"creating model!"
+        #         # encoder_kwargs[f"{cls_name}_class"] = cores[cfg_cls]
 
         # Process core and randomizer kwargs
         encoder_kwargs.core_kwargs = dict() if encoder_kwargs.core_kwargs is None else \
@@ -422,7 +422,13 @@ def unprocess_obs_dict(obs_dict):
         new_dict (dict): dictionary where observation keys have been unprocessed by
             their respective unprocessor methods
     """
-    return { k : unprocess_obs(obs=obs, obs_key=k) for k, obs in obs_dict.items() } # shallow copy
+    output_dict = {}
+    for k, obs in obs_dict.items():
+        if "image" in k:
+            output_dict[k] = unprocess_obs(obs=obs, obs_modality="rgb")
+        else:     
+            output_dict[k] = unprocess_obs(obs=obs, obs_key=k)
+    return output_dict # shallow copy
 
 
 def unprocess_frame(frame, channel_dim, scale):

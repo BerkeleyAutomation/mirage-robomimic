@@ -458,6 +458,17 @@ def env_from_checkpoint(ckpt_path=None, ckpt_dict=None, env_name=None, render=Fa
     # env_meta['env_kwargs']['use_camera_obs'] = True
     shape_meta = ckpt_dict["shape_metadata"]
 
+    # Observations for getting images and segmentation masks
+    env_meta['env_kwargs']['use_camera_obs'] = True
+    env_meta['env_kwargs']['camera_depths'] = True
+    env_meta['env_kwargs']['camera_segmentations'] = "robot_only"
+    env_meta['env_kwargs']['camera_names'] =  ["agentview", "robot0_eye_in_hand"]
+    
+    # TAG(kdharmarajan): Change this to change resolution!
+    env_meta['env_kwargs']['camera_heights'] = 84#256
+    env_meta['env_kwargs']['camera_widths'] = 84#256
+    shape_meta["use_images"] = True
+
     # create env from saved metadata
     env = EnvUtils.create_env_from_metadata(
         env_meta=env_meta, 

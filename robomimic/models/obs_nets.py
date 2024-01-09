@@ -65,6 +65,7 @@ def obs_encoder_factory(
         enc_kwargs = deepcopy(ObsUtils.DEFAULT_ENCODER_KWARGS[obs_modality]) if encoder_kwargs is None else \
             deepcopy(encoder_kwargs[obs_modality])
 
+        """
         for obs_module, cls_mapping in zip(("core", "obs_randomizer"),
                                       (ObsUtils.OBS_ENCODER_CORES, ObsUtils.OBS_RANDOMIZERS)):
             # Sanity check for kwargs in case they don't exist / are None
@@ -90,6 +91,50 @@ def obs_encoder_factory(
             net_class=enc_kwargs["core_class"],
             net_kwargs=enc_kwargs["core_kwargs"],
             randomizer=randomizer,
+        )
+        """
+        # Sanity check for kwargs in case they don't exist / are None
+        if enc_kwargs.get("core_kwargs", None) is None:
+            enc_kwargs["core_kwargs"] = {}
+        # Add in input shape info
+        enc_kwargs["core_kwargs"]["input_shape"] = obs_shape
+        # If group class is specified, then make sure corresponding kwargs only contain relevant kwargs
+        if enc_kwargs["core_class"] is not None:
+            enc_kwargs["core_kwargs"] = extract_class_init_kwargs_from_dict(
+                cls=ObsUtils.OBS_ENCODER_CORES[enc_kwargs["core_class"]],
+                dic=enc_kwargs["core_kwargs"],
+                copy=False,
+            )
+
+        # Add in input shape info
+        randomizers = []
+        obs_randomizer_class_list = enc_kwargs["obs_randomizer_class"]
+        obs_randomizer_kwargs_list = enc_kwargs["obs_randomizer_kwargs"]
+
+        if not isinstance(obs_randomizer_class_list, list):
+            obs_randomizer_class_list = [obs_randomizer_class_list]
+
+        if not isinstance(obs_randomizer_kwargs_list, list):
+            obs_randomizer_kwargs_list = [obs_randomizer_kwargs_list]
+
+        for rand_class, rand_kwargs in zip(obs_randomizer_class_list, obs_randomizer_kwargs_list):            
+            rand = None
+            if rand_class is not None:
+                rand_kwargs["input_shape"] = obs_shape
+                rand_kwargs = extract_class_init_kwargs_from_dict(
+                    cls=ObsUtils.OBS_RANDOMIZERS[rand_class],
+                    dic=rand_kwargs,
+                    copy=False,
+                )
+                rand = ObsUtils.OBS_RANDOMIZERS[rand_class](**rand_kwargs)
+            randomizers.append(rand)
+
+        enc.register_obs_key(
+            name=k,
+            shape=obs_shape,
+            net_class=enc_kwargs["core_class"],
+            net_kwargs=enc_kwargs["core_kwargs"],
+            randomizers=randomizers,
         )
 
     enc.make()
@@ -126,7 +171,8 @@ class ObservationEncoder(Module):
         net_class=None, 
         net_kwargs=None, 
         net=None, 
-        randomizer=None,
+        # randomizer=None,
+        randomizers=None,
         share_net_from=None,
     ):
         """
@@ -161,17 +207,26 @@ class ObservationEncoder(Module):
             assert share_net_from in self.obs_shapes
 
         net_kwargs = deepcopy(net_kwargs) if net_kwargs is not None else {}
+        """
         if randomizer is not None:
             assert isinstance(randomizer, Randomizer)
             if net_kwargs is not None:
                 # update input shape to visual core
                 net_kwargs["input_shape"] = randomizer.output_shape_in(shape)
+        """
+        for rand in randomizers:
+            if rand is not None:
+                assert isinstance(rand, Randomizer)
+                if net_kwargs is not None:
+                    # update input shape to visual core
+                    net_kwargs["input_shape"] = rand.output_shape_in(shape)
 
         self.obs_shapes[name] = shape
         self.obs_nets_classes[name] = net_class
         self.obs_nets_kwargs[name] = net_kwargs
         self.obs_nets[name] = net
-        self.obs_randomizers[name] = randomizer
+        # self.obs_randomizers[name] = randomizer
+        self.obs_randomizers[name] = nn.ModuleList(randomizers)
         self.obs_share_mods[name] = share_net_from
 
     def make(self):
@@ -225,6 +280,7 @@ class ObservationEncoder(Module):
 
         # process modalities by order given by @self.obs_shapes
         feats = []
+        """
         for k in self.obs_shapes:
             x = obs_dict[k]
             # maybe process encoder input with randomizer
@@ -241,7 +297,26 @@ class ObservationEncoder(Module):
             # flatten to [B, D]
             x = TensorUtils.flatten(x, begin_axis=1)
             feats.append(x)
-
+        """
+        for k in self.obs_shapes:
+            x = obs_dict[k]
+            # maybe process encoder input with randomizer
+            for rand in self.obs_randomizers[k]:
+                if rand is not None:
+                    x = rand.forward_in(x)
+            # maybe process with obs net
+            if self.obs_nets[k] is not None:
+                x = self.obs_nets[k](x)
+                if self.activation is not None:
+                    x = self.activation(x)
+            # maybe process encoder output with randomizer
+            for rand in self.obs_randomizers[k]:
+                if rand is not None:
+                    x = rand.forward_out(x)
+            # flatten to [B, D]
+            x = TensorUtils.flatten(x, begin_axis=1)
+            feats.append(x)
+            
         # concatenate all features together
         return torch.cat(feats, dim=-1)
 
@@ -250,6 +325,7 @@ class ObservationEncoder(Module):
         Compute the output shape of the encoder.
         """
         feat_dim = 0
+        """
         for k in self.obs_shapes:
             feat_shape = self.obs_shapes[k]
             if self.obs_randomizers[k] is not None:
@@ -258,6 +334,19 @@ class ObservationEncoder(Module):
                 feat_shape = self.obs_nets[k].output_shape(feat_shape)
             if self.obs_randomizers[k] is not None:
                 feat_shape = self.obs_randomizers[k].output_shape_out(feat_shape)
+            feat_dim += int(np.prod(feat_shape))
+        return [feat_dim]
+        """
+        for k in self.obs_shapes:
+            feat_shape = self.obs_shapes[k]
+            for rand in self.obs_randomizers[k]:
+                if rand is not None:
+                    feat_shape = rand.output_shape_in(feat_shape)
+            if self.obs_nets[k] is not None:
+                feat_shape = self.obs_nets[k].output_shape(feat_shape)
+            for rand in self.obs_randomizers[k]:
+                if rand is not None:
+                    feat_shape = rand.output_shape_out(feat_shape)
             feat_dim += int(np.prod(feat_shape))
         return [feat_dim]
 

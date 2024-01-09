@@ -103,8 +103,9 @@ class ActorNetwork(MIMO_MLP):
 
     def forward(self, obs_dict, goal_dict=None):
         actions = super(ActorNetwork, self).forward(obs=obs_dict, goal=goal_dict)["action"]
+        return actions
         # apply tanh squashing to ensure actions are in [-1, 1]
-        return torch.tanh(actions)
+        # return torch.tanh(actions)
 
     def _to_string(self):
         """Info to pretty print."""
