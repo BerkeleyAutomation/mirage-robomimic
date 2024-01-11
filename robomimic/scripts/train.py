@@ -348,7 +348,7 @@ def main(args):
         config.experiment.name = args.name
 
     # get torch device
-    device = TorchUtils.get_torch_device(try_to_use_cuda=config.train.cuda)
+    device = args.device
 
     # maybe modify config for debugging purposes
     if args.debug:
@@ -391,6 +391,13 @@ if __name__ == "__main__":
         default=None,
         help="(optional) path to a config json that will be used to override the default settings. \
             If omitted, default settings are used. This is the preferred way to run experiments.",
+    )
+
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        help="(optional) Device to train on (default cuda).",
     )
 
     # Algorithm Name
