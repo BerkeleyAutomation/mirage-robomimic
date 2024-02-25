@@ -183,7 +183,7 @@ def load_dict_from_checkpoint(ckpt_path):
     if not torch.cuda.is_available():
         ckpt_dict = torch.load(ckpt_path, map_location=lambda storage, loc: storage)
     else:
-        ckpt_dict = torch.load(ckpt_path)
+        ckpt_dict = torch.load(ckpt_path, map_location='cuda:4')
     return ckpt_dict
 
 
@@ -417,7 +417,7 @@ def policy_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=
     return model, ckpt_dict
 
 
-def env_from_checkpoint(ckpt_path=None, ckpt_dict=None, env_name=None, render=False, render_offscreen=False, verbose=False, robot=None):
+def env_from_checkpoint(ckpt_path=None, ckpt_dict=None, env_name=None, render=False, render_offscreen=False, verbose=False, robot=None, gripper_types=None):
     """
     Creates an environment using the metadata saved in a checkpoint.
 
@@ -462,6 +462,8 @@ def env_from_checkpoint(ckpt_path=None, ckpt_dict=None, env_name=None, render=Fa
             env_meta['env_kwargs']['robots'] = [robot, robot]
         else:
             env_meta['env_kwargs']['robots'] = [robot]
+            if gripper_types:
+                env_meta['env_kwargs']['gripper_types'] = gripper_types
     # env_meta['env_kwargs']['robots'] = ['Sawyer']
     # env_meta['env_kwargs']['camera_names'] = "sideview"
     # env_meta['env_kwargs']['use_object_obs'] = False
@@ -477,6 +479,7 @@ def env_from_checkpoint(ckpt_path=None, ckpt_dict=None, env_name=None, render=Fa
     # TAG(kdharmarajan): Change this to change resolution!
     env_meta['env_kwargs']['camera_heights'] = 84#256
     env_meta['env_kwargs']['camera_widths'] = 84#256
+    env_meta['env_kwargs']['render_gpu_device_id'] = 1
     shape_meta["use_images"] = True
 
     # create env from saved metadata

@@ -250,6 +250,7 @@ def create_env_for_data_processing(
     render_offscreen=None, 
     use_image_obs=None, 
     use_depth_obs=None, 
+    robot=None
 ):
     """
     Creates environment for processing dataset observations and rewards.
@@ -296,6 +297,9 @@ def create_env_for_data_processing(
     env_kwargs.pop("render_offscreen", None)
     env_kwargs.pop("use_image_obs", None)
     env_kwargs.pop("use_depth_obs", None)
+
+    if robot is not None:
+        env_kwargs['robots'] = [robot]
 
     env = env_class.create_for_data_processing(
         env_name=env_name, 
